@@ -4,12 +4,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ethers } from 'ethers';
 import logo from './assets/logo.png';
 
-const CONTRACT_ADDRESS = "0x82D85064A49B7544e9D81d8192Ab125a42e8a4C4";
-const ABI = [
+const SHIPMASTER_ADDRESS = "0x82D85064A49B7544e9D81d8192Ab125a42e8a4C4";
+const PULSE_ADDRESS = "0x6E2b4b0F19EE0ECcb1dd1024e4E9318a9eC2FCD2"; 
+
+const SHIPMASTER_ABI = [
   "function ship(string memory update, string memory link) public",
   "function getShipments(address builder) public view returns (tuple(string update, uint256 timestamp, string link)[])",
   "function totalShipped(address builder) public view returns (uint256)",
   "event Shipped(address indexed builder, uint256 indexed shipmentId, string update, uint256 timestamp)"
+];
+
+const PULSE_ABI = [
+  "function checkIn() external",
+  "function totalCheckIns(address builder) public view returns (uint256)",
+  "function lastCheckIn(address builder) public view returns (uint256)",
+  "event Pulse(address indexed builder, uint256 indexed count, uint256 timestamp)"
 ];
 
 const App = () => {
@@ -89,10 +98,16 @@ const App = () => {
       const network = await provider.getNetwork();
       if (Number(network.chainId) !== 42220) return;
 
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-      const data = await contract.getShipments(address);
-      const total = await contract.totalShipped(address);
+      const shipContract = new ethers.Contract(SHIPMASTER_ADDRESS, SHIPMASTER_ABI, provider);
+      const data = await shipContract.getShipments(address);
+      const totalShips = await shipContract.totalShipped(address);
       
+      let pulseTotal = 0;
+      if (PULSE_ADDRESS !== "YOUR_NEW_PULSE_ADDRESS_HERE") {
+        const pulseContract = new ethers.Contract(PULSE_ADDRESS, PULSE_ABI, provider);
+        pulseTotal = await pulseContract.totalCheckIns(address);
+      }
+
       const formatted = data.map((s, i) => ({
         id: i,
         update: s.update,
@@ -101,7 +116,7 @@ const App = () => {
       })).reverse();
       
       setShipments(formatted);
-      setStats(prev => ({ ...prev, total: Number(total) }));
+      setStats(prev => ({ ...prev, total: Number(totalShips) + Number(pulseTotal) }));
     } catch (err) {
       console.error("Failed to fetch shipments:", err);
     }
@@ -117,10 +132,9 @@ const App = () => {
       await switchNetwork();
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      const contract = new ethers.Contract(SHIPMASTER_ADDRESS, SHIPMASTER_ABI, signer);
       
       const tx = await contract.ship(formData.update, formData.link);
-      console.log("Transaction sent:", tx.hash);
       await tx.wait();
       
       setFormData({ update: '', link: '' });
@@ -128,6 +142,32 @@ const App = () => {
     } catch (err) {
       console.error("Transaction failed:", err);
       alert("Shipment failed. Ensure you are on Celo Mainnet.");
+    } finally {
+      setIsShipping(false);
+    }
+  };
+
+  const handlePulse = async () => {
+    if (!account) return connectWallet();
+    if (PULSE_ADDRESS === "YOUR_NEW_PULSE_ADDRESS_HERE") {
+      alert("Please deploy DailyPulse.sol and update PULSE_ADDRESS in App.jsx first!");
+      return;
+    }
+
+    setIsShipping(true);
+    try {
+      await switchNetwork();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(PULSE_ADDRESS, PULSE_ABI, signer);
+      
+      const tx = await contract.checkIn();
+      await tx.wait();
+      
+      fetchShipments(account);
+    } catch (err) {
+      console.error("Pulse failed:", err);
+      alert("Quick Check-in failed.");
     } finally {
       setIsShipping(false);
     }
@@ -182,6 +222,22 @@ const App = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
               <Rocket color="var(--primary)" size={24} />
               <h2 style={{ fontSize: '1.5rem' }}>Ship an Update</h2>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(53, 208, 127, 0.05)', borderRadius: '16px', border: '1px dashed var(--secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h4 style={{ color: 'var(--secondary)', fontSize: '0.9rem' }}>Ultra Low Fee Check-in</h4>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Costs ~0.005 - 0.01 CELO</p>
+                </div>
+                <button 
+                  className="btn-primary" 
+                  onClick={handlePulse}
+                  style={{ padding: '0.6rem 1.2rem', fontSize: '0.8rem', background: 'var(--secondary)', boxShadow: 'none' }}
+                >
+                  <Zap size={14} style={{ marginRight: '4px' }} /> Daily Pulse
+                </button>
+              </div>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
