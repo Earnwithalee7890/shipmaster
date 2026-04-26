@@ -14,7 +14,8 @@
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.11.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "ship-master-sdk": "^1.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
